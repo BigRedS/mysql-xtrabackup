@@ -28,7 +28,7 @@ Credentials:
     
     Don't use a defaults file
 
-  --username [user] and --password [pass]
+  --username [user], --password [pass] and --hostname [host]
 
     Specify credentials when not using a defaults file. 
 

@@ -11,6 +11,7 @@ my $defaults_file = '/etc/mysql-xtrabackup/defaults';
 my $no_defaults_file = undef;
 my $mysql_password = undef;
 my $mysql_user = undef;
+my $mysql_host = undef;
 my $backups_dir = '/home/mysql-xtrabackup/';
 my @ibx_options = (undef);
 my $no_log = undef;
@@ -25,8 +26,9 @@ GetOptions(
 	"backups-dir" => \$backups_dir,
 	"defaults-file" => \$defaults_file,
 	"no-defaults-file" => \$no_defaults_file,
-	"user=s" => \$mysql_user,
+	"username=s" => \$mysql_user,
 	"password=s" => \$mysql_password,
+	"hostname=s" => \$mysql_host,
 	"innobackupex-option=s" => \@ibx_options,
 	"help|h" => \$help,
 	"log-dir=s" => \$log_dir,
@@ -64,6 +66,7 @@ unshift(@ibx_options, "--defaults-file=$defaults_file") unless ($no_defaults_fil
 push(@ibx_options, "--no-timestamp");
 push(@ibx_options, "--user=$mysql_user") if $mysql_user;
 push(@ibx_options, "--password=$mysql_password") if $mysql_password;
+push(@ibx_options, "--host=$mysql_host") if $mysql_host;
 
 # Innobackupex requires that the directory into which it is to backup 
 # not exist, but its parent must. $backups_dir is this parent dir, and
@@ -109,6 +112,7 @@ my @apply_options;
 unshift(@apply_options, "--defaults-file=$defaults_file") unless ($no_defaults_file);
 push(@apply_options, "--user=$mysql_user") if $mysql_user;
 push(@apply_options, "--password=$mysql_password") if $mysql_password;
+push(@apply_options, "--host=$mysql_host") if $mysql_host;
 push(@apply_options, "--apply-log");
 
 my $cmd = join(" ", $innobackupex, @apply_options, $backup_dir, "2>&1");
@@ -338,7 +342,7 @@ Credentials:
     
     Don't use a defaults file
 
-  --username [user] and --password [pass]
+  --username [user], --password [pass] and --hostname [host]
 
     Specify credentials when not using a defaults file. 
 
