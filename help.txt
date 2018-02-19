@@ -1,0 +1,137 @@
+
+mysql-xtrabackup - use Percona's xtrabackup to back up a MySQL server
+
+Usage:
+
+    mysql-xtrabackup [options]
+
+
+OPTIONS: 
+
+Help:
+
+  --help:         see this help
+  --help-install: see instructions to install innobackupex
+
+Credentials:
+
+  By default, a credentials file is used to connect to the mysqld, the default 
+  path for this is /etc/mysql-xtrabackup/defaults
+
+  Behaviour here is defined by innobackupex, this script does no sanitising.
+
+  --defaults-file [path]
+
+    Explicitly set the path to the defaults file
+
+ --no-defaults-file
+    
+    Don't use a defaults file
+
+  --username [user] and --password [pass]
+
+    Specify credentials when not using a defaults file. 
+
+Output and logging:
+
+  --no-log
+    
+    Don't write a log file; everything to STDOUT instead
+
+  --log-dir:
+
+    Directory in which to write a log. See 'label' below for info on log naming
+
+Backing up:
+
+  --innobackupex [path]
+
+    path to the innobackupex binary. Default: /usr/bin/innobackupex
+
+  --innobackupex-option
+
+    Set an innobackupex option; call multiple times to set several options. To 
+    avoid confusing the options parser, use the --opt=value syntax, eg:
+
+      --innobackupex-option=--parallel=10
+
+  --backups-dir [path]
+
+    path to the directory in which to keep the backups
+
+  --label
+
+    A label to use for the backups. Influences the logfile's name, and normally
+    one of "daily", "weekly" or "monthly" but only by convention. It mey be any
+    string
+
+  --no-tar
+    
+    By defalt, the resulting directory is gzipped and tarred, setting --no-tar 
+    causes the backup to be left as a directory. This also disables the pruning.
+
+  --tar [command]
+
+    Tar invocation; passed two arguments, the name of the tarball to create and
+    the name of the directory to tar. Must, therefore, include the arguments. 
+    Default: 'tar -czvf'
+
+  --max-days [num]
+
+    Number of days to keep backups for. When a label is set and tarring is not
+    disabled, on succesful taking of a backup, all tarballs older than this 
+    number of days with this label are deleted. No pruning is done if this is
+    left unset.
+
+
+LABELS
+
+Labels are used to distinguish between backups of a different purpose, most 
+likely those of a different period. When a label is set a subdirectory is 
+created in the backups directory named for it, and so the max-days set only 
+affects those.
+
+Consider two cronsjobs:
+
+  0 3  1 * * mysql-xtrabackup --label monthly --max-days 90
+  0 17 * * * mysql-xtrabackup --label weekly --max-days 14
+
+The first will be backed up into a directory /home/mysql-xtrabackup/monthly/, 
+and the pruning will delete backups in the monthly/ directory older than 90
+days.
+
+The second will use a directory at /home/mysql-xtrabackup/weekly/, and the 
+pruning will delete backups in weekly/ older than 14 days, but leave anything
+in any other subdirectory.
+
+If --label is unset, the backups just go into /home/mysql-xtrabackup, and 
+pruning is disabled.
+
+
+The logfile is also named in accordance with the labelling. The intention is 
+to create a self-rotating log system. Daily logs are named for the day of the
+week so there's always seven, for example.
+
+The rules are:
+
+  Label    |           Pattern                  |    Example
+  ---------+------------------------------------+----------------------------
+  daily    | <day name>-daily | mon-daily       |  tue-daily
+  weekly   | <month name>-<day of month>-weekly |  feb-19-weekly
+  monthly  | <month name>-monthly               |  feb-monthly
+  hourly   | <hour>h-hourly                     |  17h-hourly
+  empty    | y-m-d_H.M.S                        |  2018-02-19_17:04:12
+  *        | y-m-d_H.M.S_<label>                |  2018-02-19_17:04:12_thing
+
+That is, any non-empty string that's not daily, weekly, monthly or hourly will
+just be appended verbatim to the end of the logfile's name.
+
+
+DETECTING FAILURE
+
+On succesful completion, the last line logged will be "Exiting OK" prefixed 
+with a timestamp, and an exit value of 0.
+
+Any problems result in a non-zero exit status and a log-line with an error
+message in it.
+

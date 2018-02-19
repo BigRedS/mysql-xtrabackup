@@ -16,12 +16,13 @@ my @ibx_options = (undef);
 my $no_log = undef;
 my $log_dir = '/var/log/mysql_xtrabackup/';
 my $label = undef;
-my $retention = 10;
+my $retention = undef;
 my $tar = 'tar -czvf';
 my $no_tar = undef;
 
 GetOptions(
 	"innobackupex" => \$innobackupex,
+	"backups-dir" => \$backups_dir,
 	"defaults-file" => \$defaults_file,
 	"no-defaults-file" => \$no_defaults_file,
 	"user=s" => \$mysql_user,
@@ -33,8 +34,9 @@ GetOptions(
 	"help-install" => \$help_install,
 	"help" => \$help,
 	"label=s" => \$label,
-	"retention=i" => \$retention,
+	"max-days=i" => \$retention,
 	"tar=s" => \$tar,
+	"no-tar" => \$no_tar,
 ) or die ("Failed to parse command line options");
 
 help_install() if $help_install;
@@ -300,7 +302,6 @@ dpkg -i percona-release_0.1-4.$(lsb_release -sc)_all.deb
 
 apt-get update ; apt-get install percona-xtrabackup-24
 
-	
 EOF
 exit 1;
 }
@@ -364,7 +365,7 @@ Backing up:
 
       --innobackupex-option=--parallel=10
 
-! --backups_dir [path]
+  --backups-dir [path]
 
     path to the directory in which to keep the backups
 
@@ -374,7 +375,7 @@ Backing up:
     one of "daily", "weekly" or "monthly" but only by convention. It mey be any
     string
 
-! --no-tar
+  --no-tar
     
     By defalt, the resulting directory is gzipped and tarred, setting --no-tar 
     causes the backup to be left as a directory. This also disables the pruning.
@@ -385,24 +386,25 @@ Backing up:
     the name of the directory to tar. Must, therefore, include the arguments. 
     Default: '$tar'
 
-  --retention [num]
+  --max-days [num]
 
     Number of days to keep backups for. When a label is set and tarring is not
     disabled, on succesful taking of a backup, all tarballs older than this 
-    number of days with this label are deleted.
+    number of days with this label are deleted. No pruning is done if this is
+    left unset.
 
 
 LABELS
 
 Labels are used to distinguish between backups of a different purpose, most 
 likely those of a different period. When a label is set a subdirectory is 
-created in the backups directory named for it, and so the retention period set
-only affects those.
+created in the backups directory named for it, and so the max-days set only 
+affects those.
 
 Consider two cronsjobs:
 
-  0 3  1 * * mysql-xtrabackup --label monthly --retention 90
-  0 17 * * * mysql-xtrabackup --label weekly --retention 14
+  0 3  1 * * mysql-xtrabackup --label monthly --max-days 90
+  0 17 * * * mysql-xtrabackup --label weekly --max-days 14
 
 The first will be backed up into a directory /home/mysql-xtrabackup/monthly/, 
 and the pruning will delete backups in the monthly/ directory older than 90
