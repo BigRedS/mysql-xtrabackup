@@ -15,6 +15,10 @@ my $backups_dir = '/home/mysql-xtrabackup/';
 my @ibx_options = (undef);
 my $no_log = undef;
 my $log_dir = '/var/log/mysql_xtrabackup/';
+my $label = undef;
+my $retention = 10;
+my $tar = 'tar -czvf';
+my $no_tar = undef;
 
 GetOptions(
 	"innobackupex" => \$innobackupex,
@@ -27,36 +31,77 @@ GetOptions(
 	"log-dir=s" => \$log_dir,
 	"no-log" => \$no_log,
 	"help-install" => \$help_install,
+	"help" => \$help,
+	"label=s" => \$label,
+	"retention=i" => \$retention,
+	"tar=s" => \$tar,
 ) or die ("Failed to parse command line options");
 
 help_install() if $help_install;
 usage() if $help;
 
+$tar = undef if $no_tar;
 
+# By default we'll log to a logfile that's deduced according to the label 
+# (which by convention is the period: daily, weekly, monthly etc.) but if
+# --no-log is passed, instead it'll go to stdout (and probably be sent to
+# a file somewhere):
+
+my $log_fh = *STDOUT;
+my $log_path;
+if($log_dir && !$no_log){
+	($log_fh,$log_path)= open_logfile($log_dir, $label);
+}
+
+# innobackupex requires that --defaults-file be the first option if it's 
+# used, so we unshift that to the list of options grabbed from the args.
+# --no-timestamp is sent because we generate our own timestamp-named dir
+# (with get_backup_dirname()):
 
 unshift(@ibx_options, "--defaults-file=$defaults_file") unless ($no_defaults_file);
 push(@ibx_options, "--no-timestamp");
 push(@ibx_options, "--user=$mysql_user") if $mysql_user;
 push(@ibx_options, "--password=$mysql_password") if $mysql_password;
 
-my $backup_dir = backup_dir_path($backups_dir);
+# Innobackupex requires that the directory into which it is to backup 
+# not exist, but its parent must. $backups_dir is this parent dir, and
+# if --label is set, then we'll create a subdirectory named for it in
+# there for backing up into, and set $backups_dir appropriately. We,
+# therefore, never create ${backups_dir}/${backup_dirname}
+
+my $backup_dirname = get_backup_dirname();
+mkdir($backups_dir) or abort("Failed to create backups dir '$backups_dir': $!") unless -d $backups_dir;
+$backups_dir = $backups_dir.'/'.$label.'/' if $label;
+$backups_dir =~ s#//#/#g;
+mkdir($backups_dir) or abort("Failed to create backups dir '$backups_dir': $!") unless -d $backups_dir;
+
+# $backup_dir is the directory into which we're going to write this backup
+# $backups_dir is its parent; the directory in which backups are kept.
+my $backup_dir = $backups_dir.$backup_dirname.'/';
+$backup_dir =~ s#//#/#g;
+
 
 my $cmd = join(" ", $innobackupex, @ibx_options, $backup_dir, "2>&1");
+info("Command: $cmd");
 
+info("Beginning backup");
 my $last_line;
 open(my $pipe, "$cmd |") or die ("Failed to open pipe to $innobackupex : $!");
 while (my $line = readline($pipe)){
 	output($line);
 	$last_line = $line;
 }
+my $retval = $?>>8;
 
-unless($last_line =~ m/completed OK!/){
-	print "Failure!\n";
-	exit;
-	# Do something;
+unless($last_line =~ m/completed OK!/ and $retval == 0){
+	chomp($last_line);
+	abort("Backup failed (exiting $retval). See log file at $log_path:\n$last_line");
+	exit 2;
 }
 
-print "Success!";
+info("Finished backup [$retval]");
+debug("Last line: $last_line");
+info("Beginning log replay");
 
 my @apply_options;
 unshift(@apply_options, "--defaults-file=$defaults_file") unless ($no_defaults_file);
@@ -64,37 +109,175 @@ push(@apply_options, "--user=$mysql_user") if $mysql_user;
 push(@apply_options, "--password=$mysql_password") if $mysql_password;
 push(@apply_options, "--apply-log");
 
-my $cmd = join(" ", $innobackupex, @apply_options, $backup_dir);
-
+my $cmd = join(" ", $innobackupex, @apply_options, $backup_dir, "2>&1");
+info("Command: $cmd");
 open($pipe, "$cmd |") or die ("Failed to open pipe to $innobackupex for applying the log : $! ");
 while (my $line = readline($pipe)){
 	output($line);
 	$last_line = $line;
 }
+$retval = $?>>8;
+
+unless($last_line =~ m/completed OK!/ and $retval == 0){
+	abort("Backup exited $retval and failed (see log file at $log_path):\n$last_line");
+	exit 4;
+}
+info("Finished replay [$retval]");
+if($tar){
+	tar($backups_dir,$backup_dirname);
+	prune_tarballs($backups_dir, $retention) if $retention > 0 and $label =~ m/.+/;
+}
+info("Exiting OK");
+
 
 # # # #
 # # #
 # #
 #
 
+sub tar{
+	my $backups_dir = shift;
+	my $backup_dirname = shift;
+	info("Beginning tarring");
+	chdir($backups_dir) or abort("Failed to cd to '$backups_dir' : $!");
+	debug("chdir to $backups_dir");
+
+	my $tarball = $backups_dir.$backup_dirname.".tar.gz";
+
+	my $cmd = "$tar $tarball $backup_dirname 2>&1";
+	info("Command: $cmd");
+	open(my $pipe, "$cmd |") or abort ("Failed to open pipe to tar: $!");
+	while (my $line = readline($pipe)){
+		output($line);
+	}
+	my $retval = $?>>8;
+	if($retval != 0){
+		abort("Tar exited $retval");
+	}
+	info("Tar exited $retval");
+	my $tarball_size = (stat($tarball))[7];
+	info("Wrote tar file: $tarball ($tarball_size bytes)");
+
+	# Just in case...
+	unless($tarball_size > 4096){
+		abort("Tarball only $tarball_size bytes. This looks wrong.");
+	}
+	info("removing backup now that it's tarred");
+	my $cmd = "rm -rf $backup_dirname 2>&1";
+	info("Command: $cmd");
+	foreach my $output(`$cmd`){
+		output($cmd);
+	}
+	my $retval = $?>>8;
+	if($retval != 0){
+		abort("rm exited non-zero ($retval)");
+	}
+	info("Finished tarring");
+}
+
+sub prune_tarballs{
+	my $backup_dir = shift;
+	my $retention = shift;
+
+	info("Starting pruning old backups");
+	info("Deleting tarballs older than $retention days");
+	chdir($backups_dir) or abort("Failed to cd to '$backups_dir'");
+	my $cmd = "find . -name \*xtrabackup.tar.gz -mtime +$retention -delete";
+	info("Command: $cmd");
+	my $retval = $?>>8;
+	if($retval != 0){
+		abort("find exited non-zero ($retval)");
+	}
+	info("Finished pruning old backups");
+}
+
 sub output{
 	my $message = shift;
 	chomp($message);
-	print "[".localtime()."] $message\n";
+	print $log_fh "[".localtime()."]    $message\n";
+}
+
+sub info{
+	my $message = shift;
+	chomp($message);
+	print $log_fh "[".localtime()."] $message\n";
+	print STDERR 'INFO:  '.$message."\n" if $ENV{DEBUG};
+}
+
+sub abort{
+	my $message = shift;
+	chomp($message);
+	print STDERR "ERROR: ".$message."\n";
+	print STDERR "Aborting\n";
+	exit 1;
+}
+
+sub debug{
+	return unless $ENV{DEBUG};
+	my $message = shift;
+	chomp($message);
+	print STDERR 'DEBUG: '.$message."\n";
 }
 
 
-sub backup_dir_path{
-	my $backups_dir = shift;
-	my ($y,$m,$d,$H,$M,$S) = (localtime(time()))[5,4,3,2,1,0];
+sub get_backup_dirname{
+	my ($dow,$y,$m,$d,$H,$M,$S) = (localtime(time()))[6,5,4,3,2,1,0];
+	my @days = qw/mon tue wed thu fri sat sun mon/;
 	$y+=1900;
 	$m++;
-	my $timestamp = sprintf("%04d-%02d-%02d_%02d:%02d:%02d", $y,$m,$d,$H,$M,$S);
-	my $path = $backups_dir."/".$timestamp;
-	$path =~ s#//#/#g;
-	return $path;
+	my $day = $days[$dow];
+	my $dirname = sprintf("%04d-%02d-%02d_%02d.%02d.%02d_%s-%s", $y,$m,$d,$H,$M,$S,$day,"mysql-xtrabackup");
+	return $dirname;
 }
 
+sub open_logfile{
+	my $logdir = shift;
+	my $label = shift;
+
+	unless(-d $logdir){
+		abort("Logdir '$logdir' does not exist, or is not a directory");
+	}
+
+	debug("Logdir: $logdir, Label: $label");
+	my @days = qw/mon tue wed thu fri sat sun mon/;
+	my @months = qw/jan feb mar apr jun jul aug sep oct nov dec/;
+
+	my ($dow,$y,$m,$d,$H,$M,$S) = (localtime(time()))[6,5,4,3,2,1,0];
+
+
+	my ($y,$m,$d,$H,$dow) = (localtime(time()))[5,4,3,2,6];
+	$y+=1900;
+	my $day = $days[$dow];
+	my $month = $months[$m];
+
+	my $name;
+	if(lc($label) eq 'daily'){
+		$name = $day.'-daily';
+
+	}elsif(lc($label) eq 'weekly'){
+		$name = sprintf("%s-%02d-weekly", $month, $d);
+
+	}elsif(lc($label) eq 'monthly'){
+		$name = $month.'-monthly';
+
+	}elsif(lc($label) eq 'hourly'){
+		$name = sprintf("%02dh-hourly", $H);
+
+	}elsif(lc($label) eq ''){
+		$name = sprintf("%d-%02d-%02d_%02d:%02d:%02d", $y,$m+1,$d,$H,$M,$S);
+	}else{
+		$name = sprintf("%d-%02d-%02d_%02d:%02d:%02d_%s", $y,$m+1,$d,$H,$M,$S,$label);
+	}
+
+	my $path = $logdir.'/'.$name;
+	$path =~ s#//#/#g;
+
+	debug("Log name: $name");
+	debug("Log path: $path");
+
+	open(my $fh, ">", $path) or abort("Failed to open logfile '$path' : $!");
+	return ($fh, $path);
+}
 
 
 sub usage{
@@ -105,22 +288,164 @@ exit;
 sub help_install{
 
 print <<'EOF';
+# Fetch the repository packages from Percona web:
 
-How to install percona Xtrabackup:
+wget "https://repo.percona.com/apt/percona-release_0.1-4.$(lsb_release -sc)_all.deb"
 
-  1. Fetch the repository packages from Percona web:
-
-wget https://repo.percona.com/apt/percona-release_0.1-4.$(lsb_release -sc)_all.deb
-
-  2. Install the downloaded package with dpkg. To do that, run the following commands as root or with sudo:
+# Install the downloaded package with dpkg. To do that, run the following commands as root or with sudo:
 
 dpkg -i percona-release_0.1-4.$(lsb_release -sc)_all.deb
 
-  3. Update the local cache and install the package
+# Update the local cache and install the package
 
 apt-get update ; apt-get install percona-xtrabackup-24
 
 	
 EOF
-exit;
+exit 1;
 }
+
+sub usage{
+print << "EOF";
+
+mysql-xtrabackup - use Percona's xtrabackup to back up a MySQL server
+
+Usage:
+
+    mysql-xtrabackup [options]
+
+
+OPTIONS: 
+
+Help:
+
+  --help:         see this help
+  --help-install: see instructions to install innobackupex
+
+Credentials:
+
+  By default, a credentials file is used to connect to the mysqld, the default 
+  path for this is $defaults_file
+
+  Behaviour here is defined by innobackupex, this script does no sanitising.
+
+  --defaults-file [path]
+
+    Explicitly set the path to the defaults file
+
+ --no-defaults-file
+    
+    Don't use a defaults file
+
+  --username [user] and --password [pass]
+
+    Specify credentials when not using a defaults file. 
+
+Output and logging:
+
+  --no-log
+    
+    Don't write a log file; everything to STDOUT instead
+
+  --log-dir:
+
+    Directory in which to write a log. See 'label' below for info on log naming
+
+Backing up:
+
+  --innobackupex [path]
+
+    path to the innobackupex binary. Default: $innobackupex
+
+  --innobackupex-option
+
+    Set an innobackupex option; call multiple times to set several options. To 
+    avoid confusing the options parser, use the --opt=value syntax, eg:
+
+      --innobackupex-option=--parallel=10
+
+! --backups_dir [path]
+
+    path to the directory in which to keep the backups
+
+  --label
+
+    A label to use for the backups. Influences the logfile's name, and normally
+    one of "daily", "weekly" or "monthly" but only by convention. It mey be any
+    string
+
+! --no-tar
+    
+    By defalt, the resulting directory is gzipped and tarred, setting --no-tar 
+    causes the backup to be left as a directory. This also disables the pruning.
+
+  --tar [command]
+
+    Tar invocation; passed two arguments, the name of the tarball to create and
+    the name of the directory to tar. Must, therefore, include the arguments. 
+    Default: '$tar'
+
+  --retention [num]
+
+    Number of days to keep backups for. When a label is set and tarring is not
+    disabled, on succesful taking of a backup, all tarballs older than this 
+    number of days with this label are deleted.
+
+
+LABELS
+
+Labels are used to distinguish between backups of a different purpose, most 
+likely those of a different period. When a label is set a subdirectory is 
+created in the backups directory named for it, and so the retention period set
+only affects those.
+
+Consider two cronsjobs:
+
+  0 3  1 * * mysql-xtrabackup --label monthly --retention 90
+  0 17 * * * mysql-xtrabackup --label weekly --retention 14
+
+The first will be backed up into a directory /home/mysql-xtrabackup/monthly/, 
+and the pruning will delete backups in the monthly/ directory older than 90
+days.
+
+The second will use a directory at /home/mysql-xtrabackup/weekly/, and the 
+pruning will delete backups in weekly/ older than 14 days, but leave anything
+in any other subdirectory.
+
+If --label is unset, the backups just go into /home/mysql-xtrabackup, and 
+pruning is disabled.
+
+
+The logfile is also named in accordance with the labelling. The intention is 
+to create a self-rotating log system. Daily logs are named for the day of the
+week so there's always seven, for example.
+
+The rules are:
+
+  Label    |           Pattern                  |    Example
+  ---------+------------------------------------+----------------------------
+  daily    | <day name>-daily | mon-daily       |  tue-daily
+  weekly   | <month name>-<day of month>-weekly |  feb-19-weekly
+  monthly  | <month name>-monthly               |  feb-monthly
+  hourly   | <hour>h-hourly                     |  17h-hourly
+  empty    | y-m-d_H.M.S                        |  2018-02-19_17:04:12
+  *        | y-m-d_H.M.S_<label>                |  2018-02-19_17:04:12_thing
+
+That is, any non-empty string that's not daily, weekly, monthly or hourly will
+just be appended verbatim to the end of the logfile's name.
+
+
+DETECTING FAILURE
+
+On succesful completion, the last line logged will be "Exiting OK" prefixed 
+with a timestamp, and an exit value of 0.
+
+Any problems result in a non-zero exit status and a log-line with an error
+message in it.
+
+EOF
+
+exit 1;
+
+}
+
