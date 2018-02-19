@@ -1,0 +1,126 @@
+#! /usr/bin/perl
+
+use strict;
+use Getopt::Long;
+use Data::Dumper;
+
+my $help = undef;
+my $help_install = undef;
+my $innobackupex = '/usr/bin/innobackupex';
+my $defaults_file = '/etc/mysql-xtrabackup/defaults';
+my $no_defaults_file = undef;
+my $mysql_password = undef;
+my $mysql_user = undef;
+my $backups_dir = '/home/mysql-xtrabackup/';
+my @ibx_options = (undef);
+my $no_log = undef;
+my $log_dir = '/var/log/mysql_xtrabackup/';
+
+GetOptions(
+	"innobackupex" => \$innobackupex,
+	"defaults-file" => \$defaults_file,
+	"no-defaults-file" => \$no_defaults_file,
+	"user=s" => \$mysql_user,
+	"password=s" => \$mysql_password,
+	"innobackupex-option=s" => \@ibx_options,
+	"help|h" => \$help,
+	"log-dir=s" => \$log_dir,
+	"no-log" => \$no_log,
+	"help-install" => \$help_install,
+) or die ("Failed to parse command line options");
+
+help_install() if $help_install;
+usage() if $help;
+
+
+
+unshift(@ibx_options, "--defaults-file=$defaults_file") unless ($no_defaults_file);
+push(@ibx_options, "--no-timestamp");
+push(@ibx_options, "--user=$mysql_user") if $mysql_user;
+push(@ibx_options, "--password=$mysql_password") if $mysql_password;
+
+my $backup_dir = backup_dir_path($backups_dir);
+
+my $cmd = join(" ", $innobackupex, @ibx_options, $backup_dir, "2>&1");
+
+my $last_line;
+open(my $pipe, "$cmd |") or die ("Failed to open pipe to $innobackupex : $!");
+while (my $line = readline($pipe)){
+	output($line);
+	$last_line = $line;
+}
+
+unless($last_line =~ m/completed OK!/){
+	print "Failure!\n";
+	exit;
+	# Do something;
+}
+
+print "Success!";
+
+my @apply_options;
+unshift(@apply_options, "--defaults-file=$defaults_file") unless ($no_defaults_file);
+push(@apply_options, "--user=$mysql_user") if $mysql_user;
+push(@apply_options, "--password=$mysql_password") if $mysql_password;
+push(@apply_options, "--apply-log");
+
+my $cmd = join(" ", $innobackupex, @apply_options, $backup_dir);
+
+open($pipe, "$cmd |") or die ("Failed to open pipe to $innobackupex for applying the log : $! ");
+while (my $line = readline($pipe)){
+	output($line);
+	$last_line = $line;
+}
+
+# # # #
+# # #
+# #
+#
+
+sub output{
+	my $message = shift;
+	chomp($message);
+	print "[".localtime()."] $message\n";
+}
+
+
+sub backup_dir_path{
+	my $backups_dir = shift;
+	my ($y,$m,$d,$H,$M,$S) = (localtime(time()))[5,4,3,2,1,0];
+	$y+=1900;
+	$m++;
+	my $timestamp = sprintf("%04d-%02d-%02d_%02d:%02d:%02d", $y,$m,$d,$H,$M,$S);
+	my $path = $backups_dir."/".$timestamp;
+	$path =~ s#//#/#g;
+	return $path;
+}
+
+
+
+sub usage{
+
+exit;
+}
+
+sub help_install{
+
+print <<'EOF';
+
+How to install percona Xtrabackup:
+
+  1. Fetch the repository packages from Percona web:
+
+wget https://repo.percona.com/apt/percona-release_0.1-4.$(lsb_release -sc)_all.deb
+
+  2. Install the downloaded package with dpkg. To do that, run the following commands as root or with sudo:
+
+dpkg -i percona-release_0.1-4.$(lsb_release -sc)_all.deb
+
+  3. Update the local cache and install the package
+
+apt-get update ; apt-get install percona-xtrabackup-24
+
+	
+EOF
+exit;
+}
