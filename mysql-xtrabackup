@@ -4,6 +4,7 @@ use strict;
 use Getopt::Long;
 use Data::Dumper;
 
+my $lockfile = "/tmp/mysql-xtrabackup.lock";
 my $help = undef;
 my $help_install = undef;
 my $innobackupex = '/usr/bin/innobackupex';
@@ -43,6 +44,9 @@ GetOptions(
 
 help_install() if $help_install;
 usage() if $help;
+
+write_lock($lockfile);
+$SIG{INT} = sub{ unlock($lockfile) and abort("Ctrl-C caught"); };
 
 $tar = undef if $no_tar;
 
@@ -133,6 +137,7 @@ if($tar){
 	tar($backups_dir,$backup_dirname);
 	prune_tarballs($backups_dir, $retention) if $retention > 0 and $label =~ m/.+/;
 }
+unlock($lockfile);
 info("Exiting OK");
 
 
@@ -234,6 +239,41 @@ sub get_backup_dirname{
 	my $day = $days[$dow];
 	my $dirname = sprintf("%04d-%02d-%02d_%02d.%02d.%02d_%s-%s", $y,$m,$d,$H,$M,$S,$day,"mysql-xtrabackup");
 	return $dirname;
+}
+
+sub write_lock{
+	my $lockfile = shift;
+	debug("Lockfile: $lockfile");
+	if(-f $lockfile){
+		open(my $fh, "<", $lockfile) or abort ("Failed to open lockfile '$lockfile' for reading :$!");
+		my $written_pid = readline($fh);
+		close(fh);
+		abort("Lockfile already written-to by process '$written_pid'");
+	}
+	open(my $fh, ">", $lockfile) or abort ("Failed to open lockflile '$lockfile' for writing : $!");
+	print $fh $$;
+	close($fh);
+	sleep 1;
+	open(my $fh, "<", $lockfile) or abort ("Failed to open lockfile '$lockfile' for reading :$!");
+	my $written_pid = readline($fh);
+	close(fh);
+	if($written_pid eq $$){
+		return $written_pid;
+	}
+	abort("Lockfile '$lockfile' already written by process '$written_pid'");
+}
+
+sub unlock{
+	my $lockfile = shift;
+	open(my $fh, "<", $lockfile) or abort ("Failed to open lockfile '$lockfile' for reading :$!");
+	my $written_pid = readline($fh);
+	close(fh);
+	if($written_pid eq $$){
+		info("Removing lock file $lockfile");
+		unlink($lockfile);
+		return 1;
+	}
+	abort ("Lockfile '$lockfile' owned by another process: '$written_pid'");
 }
 
 sub open_logfile{
