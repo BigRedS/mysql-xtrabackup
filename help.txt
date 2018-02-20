@@ -41,6 +41,7 @@ Output and logging:
   --log-dir:
 
     Directory in which to write a log. See 'label' below for info on log naming
+    Default: /var/log/mysql-xtrabackup/
 
 Backing up:
 
@@ -57,7 +58,8 @@ Backing up:
 
   --backups-dir [path]
 
-    path to the directory in which to keep the backups
+    path to the directory in which to keep the backups. 
+    Default: /home/mysql-xtrabackup/
 
   --label
 

@@ -370,7 +370,7 @@ Help:
 
 Credentials:
 
-  By default, a credentials file is used to connect to the mysqld, the default 
+  By default, a defaults file is used to connect to the mysqld, the default 
   path for this is $defaults_file
 
   Behaviour here is defined by innobackupex, this script does no sanitising.
@@ -396,6 +396,7 @@ Output and logging:
   --log-dir:
 
     Directory in which to write a log. See 'label' below for info on log naming
+    Default: $log_dir
 
 Backing up:
 
@@ -412,7 +413,8 @@ Backing up:
 
   --backups-dir [path]
 
-    path to the directory in which to keep the backups
+    path to the directory in which to keep the backups.
+    Default: $backups_dir
 
   --label
 
