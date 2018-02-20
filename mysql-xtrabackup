@@ -24,6 +24,7 @@ my $no_tar = undef;
 
 GetOptions(
 	"innobackupex" => \$innobackupex,
+	"lockfile" => \$lockfile,
 	"backups-dir" => \$backups_dir,
 	"defaults-file" => \$defaults_file,
 	"no-defaults-file" => \$no_defaults_file,
@@ -436,6 +437,11 @@ Backing up:
     disabled, on succesful taking of a backup, all tarballs older than this 
     number of days with this label are deleted. No pruning is done if this is
     left unset.
+
+  --lockfile
+
+    Path to lockfile created to avoid having two processes running at the same 
+    time. Default: $lockfile
 
 
 LABELS

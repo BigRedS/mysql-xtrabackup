@@ -83,6 +83,11 @@ Backing up:
     number of days with this label are deleted. No pruning is done if this is
     left unset.
 
+  --lockfile
+
+    Path to lockfile created to avoid having two processes running at the same 
+    time. Default: /tmp/mysql-xtrabackup.lock
+
 
 LABELS
 
