@@ -127,8 +127,8 @@ The rules are:
   weekly   | <month name>-<day of month>-weekly |  feb-19-weekly
   monthly  | <month name>-monthly               |  feb-monthly
   hourly   | <hour>h-hourly                     |  17h-hourly
-  empty    | y-m-d_H.M.S                        |  2018-02-19_17:04:12
-  *        | y-m-d_H.M.S_<label>                |  2018-02-19_17:04:12_thing
+  empty    | y-m-d_H:M:S                        |  2018-02-19_17:04:12
+  *        | y-m-d_H:M:S_<label>                |  2018-02-19_17:04:12_thing
 
 That is, any non-empty string that's not daily, weekly, monthly or hourly will
 just be appended verbatim to the end of the logfile's name.

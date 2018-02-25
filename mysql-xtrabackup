@@ -156,7 +156,7 @@ sub tar{
 
 	my $tarball = $backups_dir.$backup_dirname.".tar.gz";
 
-	my $cmd = "$tar $tarball $backup_dirname 2>&1";
+	my $cmd = "$tar '$tarball' '$backup_dirname' 2>&1";
 	info("Command: $cmd");
 	open(my $pipe, "$cmd |") or abort ("Failed to open pipe to tar: $!");
 	while (my $line = readline($pipe)){
@@ -238,7 +238,7 @@ sub get_backup_dirname{
 	$y+=1900;
 	$m++;
 	my $day = $days[$dow];
-	my $dirname = sprintf("%04d-%02d-%02d_%02d.%02d.%02d_%s-%s", $y,$m,$d,$H,$M,$S,$day,"mysql-xtrabackup");
+	my $dirname = sprintf("%04d-%02d-%02d_%02d:%02d:%02d_%s-%s", $y,$m,$d,$H,$M,$S,$day,"mysql-xtrabackup");
 	return $dirname;
 }
 
@@ -482,8 +482,8 @@ The rules are:
   weekly   | <month name>-<day of month>-weekly |  feb-19-weekly
   monthly  | <month name>-monthly               |  feb-monthly
   hourly   | <hour>h-hourly                     |  17h-hourly
-  empty    | y-m-d_H.M.S                        |  2018-02-19_17:04:12
-  *        | y-m-d_H.M.S_<label>                |  2018-02-19_17:04:12_thing
+  empty    | y-m-d_H:M:S                        |  2018-02-19_17:04:12
+  *        | y-m-d_H:M:S_<label>                |  2018-02-19_17:04:12_thing
 
 That is, any non-empty string that's not daily, weekly, monthly or hourly will
 just be appended verbatim to the end of the logfile's name.
