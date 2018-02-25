@@ -59,6 +59,7 @@ $tar = undef if $no_tar;
 my $log_fh = *STDOUT;
 my $log_path;
 if($log_dir && !$no_log){
+	unless (-d $log_dir){ mkdir($log_dir) or abort("Failed to create logs dir '$log_dir' : $!");}
 	($log_fh,$log_path)= open_logfile($log_dir, $label);
 }
 
