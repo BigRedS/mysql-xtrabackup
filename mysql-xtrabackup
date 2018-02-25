@@ -62,6 +62,10 @@ if($log_dir && !$no_log){
 	($log_fh,$log_path)= open_logfile($log_dir, $label);
 }
 
+if( !-f $defaults_file and !$no_defaults_file){
+	abort("Defaults file '$defaults_file' not found and --no-defults-file not set");
+}
+
 # innobackupex requires that --defaults-file be the first option if it's 
 # used, so we unshift that to the list of options grabbed from the args.
 # --no-timestamp is sent because we generate our own timestamp-named dir
