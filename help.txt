@@ -15,8 +15,8 @@ Help:
 
 Credentials:
 
-  By default, a credentials file is used to connect to the mysqld, the default 
-  path for this is /etc/mysql-xtrabackup/defaults
+  By default, a defaults file is used to connect to the mysqld, the default 
+  path for this is ~/.my.cnf
 
   Behaviour here is defined by innobackupex, this script does no sanitising.
 
@@ -58,7 +58,7 @@ Backing up:
 
   --backups-dir [path]
 
-    path to the directory in which to keep the backups. 
+    path to the directory in which to keep the backups.
     Default: /home/mysql-xtrabackup/
 
   --label
