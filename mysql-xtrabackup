@@ -41,7 +41,7 @@ GetOptions(
 	"max-days=i" => \$retention,
 	"tar=s" => \$tar,
 	"no-tar" => \$no_tar,
-) or die ("Failed to parse command line options");
+) or abort ("Failed to parse command line options");
 
 help_install() if $help_install;
 usage() if $help;
@@ -100,7 +100,7 @@ info("Command: $cmd");
 
 info("Beginning backup");
 my $last_line;
-open(my $pipe, "$cmd |") or die ("Failed to open pipe to $innobackupex : $!");
+open(my $pipe, "$cmd |") or abort ("Failed to open pipe to $innobackupex : $!");
 while (my $line = readline($pipe)){
 	output($line);
 	$last_line = $line;
@@ -126,7 +126,7 @@ push(@apply_options, "--apply-log");
 
 my $cmd = join(" ", $innobackupex, @apply_options, $backup_dir, "2>&1");
 info("Command: $cmd");
-open($pipe, "$cmd |") or die ("Failed to open pipe to $innobackupex for applying the log : $! ");
+open($pipe, "$cmd |") or abort ("Failed to open pipe to $innobackupex for applying the log : $! ");
 while (my $line = readline($pipe)){
 	output($line);
 	$last_line = $line;
@@ -225,6 +225,7 @@ sub abort{
 	chomp($message);
 	print STDERR "ERROR: ".$message."\n";
 	print STDERR "Aborting\n";
+	unlock($lockfile, 1);
 	exit 1;
 }
 
@@ -270,6 +271,7 @@ sub write_lock{
 
 sub unlock{
 	my $lockfile = shift;
+	my $called_by_abort = shift;
 	open(my $fh, "<", $lockfile) or abort ("Failed to open lockfile '$lockfile' for reading :$!");
 	my $written_pid = readline($fh);
 	close(fh);
@@ -278,7 +280,11 @@ sub unlock{
 		unlink($lockfile);
 		return 1;
 	}
-	abort ("Lockfile '$lockfile' owned by another process: '$written_pid'");
+	if($called_by_abort){
+		print "unlock() called by abort() failed: \"Lockfile '$lockfile' owned by another process: '$written_pid' (this is $$)\"";
+		exit 255;
+	}
+	abort ("Lockfile '$lockfile' owned by another process: '$written_pid' (this is $$)");
 }
 
 sub open_logfile{
