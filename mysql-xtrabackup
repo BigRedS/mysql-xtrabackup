@@ -254,7 +254,7 @@ sub write_lock{
 		open(my $fh, "<", $lockfile) or abort ("Failed to open lockfile '$lockfile' for reading :$!");
 		my $written_pid = readline($fh);
 		close(fh);
-		abort("Lockfile already written-to by process '$written_pid'");
+		abort("Lockfile '$lockfile' already written-to by process '$written_pid'");
 	}
 	open(my $fh, ">", $lockfile) or abort ("Failed to open lockflile '$lockfile' for writing : $!");
 	print $fh $$;
