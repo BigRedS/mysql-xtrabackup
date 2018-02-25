@@ -8,7 +8,7 @@ my $lockfile = "/tmp/mysql-xtrabackup.lock";
 my $help = undef;
 my $help_install = undef;
 my $innobackupex = '/usr/bin/innobackupex';
-my $defaults_file = '/etc/mysql-xtrabackup/defaults';
+my $defaults_file = $ENV{HOME}.'/.my,cnf';
 my $no_defaults_file = undef;
 my $mysql_password = undef;
 my $mysql_user = undef;
@@ -371,7 +371,7 @@ Help:
 Credentials:
 
   By default, a defaults file is used to connect to the mysqld, the default 
-  path for this is $defaults_file
+  path for this is ~/.my.cnf
 
   Behaviour here is defined by innobackupex, this script does no sanitising.
 
