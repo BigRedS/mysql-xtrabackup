@@ -23,10 +23,10 @@ my $tar = 'tar -czvf';
 my $no_tar = undef;
 
 GetOptions(
-	"innobackupex" => \$innobackupex,
-	"lockfile" => \$lockfile,
-	"backups-dir" => \$backups_dir,
-	"defaults-file" => \$defaults_file,
+	"innobackupex=s" => \$innobackupex,
+	"lockfile=s" => \$lockfile,
+	"backups-dir=s" => \$backups_dir,
+	"defaults-file=s" => \$defaults_file,
 	"no-defaults-file" => \$no_defaults_file,
 	"username=s" => \$mysql_user,
 	"password=s" => \$mysql_password,
