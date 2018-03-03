@@ -285,7 +285,7 @@ sub unlock{
 		print "unlock() called by abort() failed: \"Lockfile '$lockfile' owned by another process: '$written_pid' (this is $$)\"";
 		exit 255;
 	}
-	abort ("Lockfile '$lockfile' owned by another process: '$written_pid' (this is $$)");
+	abort ("Lockfile '$lockfile' owned by another process: '$written_pid' (this is $$)\n");
 }
 
 sub open_logfile{
