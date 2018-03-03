@@ -199,7 +199,7 @@ sub prune_tarballs{
 	info("Starting pruning old backups");
 	info("Deleting tarballs older than $retention days");
 	chdir($backups_dir) or abort("Failed to cd to '$backups_dir'");
-	my $cmd = "find . -name \*xtrabackup.tar.gz -mtime +$retention -delete";
+	my $cmd = "find '$backup_dir' -name \*xtrabackup.tar.gz -mtime +$retention -delete";
 	info("Command: $cmd");
 	my $retval = $?>>8;
 	if($retval != 0){
