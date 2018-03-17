@@ -4,6 +4,8 @@ use strict;
 use Getopt::Long;
 use Data::Dumper;
 
+my $version = '0.20180315';
+
 my $lockfile = "/tmp/mysql-xtrabackup.lock";
 my $help = undef;
 my $help_install = undef;
@@ -21,6 +23,7 @@ my $label = undef;
 my $retention = undef;
 my $tar = 'tar -czvf';
 my $no_tar = undef;
+my $show_version;
 
 GetOptions(
 	"innobackupex=s" => \$innobackupex,
@@ -41,8 +44,10 @@ GetOptions(
 	"max-days=i" => \$retention,
 	"tar=s" => \$tar,
 	"no-tar" => \$no_tar,
+	"version" => \$show_version,
 ) or abort ("Failed to parse command line options");
 
+print "mysql-xtrabackup version $version\n" and exit if $show_version;
 help_install() if $help_install;
 usage() if $help;
 
