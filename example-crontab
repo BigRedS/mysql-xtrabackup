@@ -1,4 +1,4 @@
 # Monthly mysql-xtrabackup backup; keeping a year's worth.
 # https://github.com/BigRedS/mysql-xtrabackup
 
-0 2 1 * * root /usr/local/sbin/mysql-xtrabackup --defaults-file /etc/mysql/mysql-xtrabackup.cf --no-defaults-file --label monthly --max-days 366
+0 2 1 * * root /usr/sbin/mysql-xtrabackup --defaults-file /etc/mysql/debian.cnf --label monthly --max-days 366
