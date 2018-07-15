@@ -3,7 +3,9 @@
 use strict;
 use Getopt::Long;
 use Data::Dumper;
+use Sys::Syslog;
 
+my $name = 'mysql-xtrabackup';
 my $version = '0.20180315';
 
 my $lockfile = "/tmp/mysql-xtrabackup.lock";
@@ -50,6 +52,9 @@ GetOptions(
 print "mysql-xtrabackup version $version\n" and exit if $show_version;
 help_install() if $help_install;
 usage() if $help;
+
+openlog("$name/$label", 'pid', 'info');
+syslog('info', 'Starting');
 
 write_lock($lockfile);
 $SIG{INT} = sub{ unlock($lockfile) and abort("Ctrl-C caught", 1); };
@@ -105,6 +110,7 @@ my $cmd = join(" ", $innobackupex, @ibx_options, $backup_dir, "2>&1");
 info("Command: $cmd");
 
 info("Beginning backup");
+syslog('info', 'Beginning backup');
 my $last_line;
 open(my $pipe, "$cmd |") or abort ("Failed to open pipe to $innobackupex : $!");
 while (my $line = readline($pipe)){
@@ -121,6 +127,7 @@ unless($last_line =~ m/completed OK!/ and $retval == 0){
 
 info("Finished backup [$retval]");
 debug("Last line: $last_line");
+syslog('info', 'Finished backup; beginning log replay');
 info("Beginning log replay");
 
 my @apply_options;
@@ -144,11 +151,13 @@ unless($last_line =~ m/completed OK!/ and $retval == 0){
 	exit 4;
 }
 info("Finished replay [$retval]");
+syslog('info', 'Finished log replay');
 if($tar){
 	tar($backups_dir,$backup_dirname);
 	prune_tarballs($backups_dir, $retention) if $retention > 0 and $label =~ m/.+/;
 }
 unlock($lockfile);
+syslog('info', 'Exiting OK');
 info("Exiting OK");
 
 
@@ -232,6 +241,9 @@ sub abort{
 	chomp($message);
 	print STDERR "ERROR: ".$message."\n";
 	print STDERR "Aborting\n";
+	# '$dont_unlock is set on abort() calls that predate the locking of a
+	# file, which also happens to be when openlog() is called.
+	syslog('info', 'Aborting: '.$message) unless $dont_unlock;
 	unlock($lockfile, 1) unless $dont_unlock;
 	exit 1;
 }
