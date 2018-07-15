@@ -45,14 +45,14 @@ GetOptions(
 	"tar=s" => \$tar,
 	"no-tar" => \$no_tar,
 	"version" => \$show_version,
-) or abort ("Failed to parse command line options");
+) or abort ("Failed to parse command line options", 1);
 
 print "mysql-xtrabackup version $version\n" and exit if $show_version;
 help_install() if $help_install;
 usage() if $help;
 
 write_lock($lockfile);
-$SIG{INT} = sub{ unlock($lockfile) and abort("Ctrl-C caught"); };
+$SIG{INT} = sub{ unlock($lockfile) and abort("Ctrl-C caught", 1); };
 
 $tar = undef if $no_tar;
 
@@ -228,10 +228,11 @@ sub info{
 
 sub abort{
 	my $message = shift;
+	my $dont_unlock = shift;
 	chomp($message);
 	print STDERR "ERROR: ".$message."\n";
 	print STDERR "Aborting\n";
-	unlock($lockfile, 1);
+	unlock($lockfile, 1) unless $dont_unlock;
 	exit 1;
 }
 
